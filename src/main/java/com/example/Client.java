@@ -4,8 +4,6 @@ import com.example.annotations.Component;
 import com.example.annotations.Inject;
 import com.example.annotations.PostConstruct;
 import com.example.annotations.Scope;
-import com.example.enums.ScopeType;
-import com.example.interfaces.IServiceB;
 
 /**
  * A client class that depends on ServiceB.
@@ -17,7 +15,7 @@ import com.example.interfaces.IServiceB;
 //@Scope(ScopeType.PROTOTYPE)
 public class Client {
     @Inject
-    private IServiceB serviceB;
+    private ServiceB serviceB;
 
     @PostConstruct
     public void init() {

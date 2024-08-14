@@ -2,8 +2,6 @@ package com.example;
 
 import com.example.annotations.Component;
 import com.example.annotations.Inject;
-import com.example.annotations.Scope;
-import com.example.enums.ScopeType;
 
 /**
  * A service class that depends on ServiceA.
