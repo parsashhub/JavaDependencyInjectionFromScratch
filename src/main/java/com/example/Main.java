@@ -1,22 +1,17 @@
 package com.example;
 
 import com.example.DI.DIContainer;
+import com.example.interfaces.IGreetingService;
 
 public class Main {
     public static void main(String[] args) throws Exception {
-        DIContainer container = new DIContainer();
-        container.scanPackage("com.example");
+        DIContainer container = new DIContainer("com.example");
+        // Get GreetingClient from the container and use it
+        GreetingClient client = container.getComponent(GreetingClient.class);
+        client.greet("John");
 
-        System.out.println("component registery:\n" + container.getComponentRegistry() + "\n");
-        System.out.println("SingletonObjects:\n" + container.getSingletonObjects() + "\n");
-
-        ServiceB serviceB = container.resolve(ServiceB.class);
-        serviceB.doSomething();
-        // Same instance of ServiceB will be used
-        ServiceB serviceB2 = container.resolve(ServiceB.class);
-        serviceB2.doSomething();
-
-        Client client = container.resolve(Client.class);
-        client.process();
+        // Directly access the SpanishGreetingService and use it
+        IGreetingService spanishService = container.getComponent(SpanishGreetingService.class);
+        spanishService.greet("Juan");
     }
 }
