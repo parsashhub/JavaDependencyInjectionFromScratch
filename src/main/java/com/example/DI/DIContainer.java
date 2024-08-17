@@ -1,166 +1,170 @@
 package com.example.DI;
 
-import com.example.annotations.Component;
-import com.example.annotations.Inject;
-import com.example.annotations.PostConstruct;
-import com.example.annotations.Scope;
+import com.example.annotations.*;
+import com.example.enums.Scope;
+import org.reflections.Reflections;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
 public class DIContainer {
-    // Stores singleton instances of components
-    private Map<Class<?>, Object> singletonObjects = new HashMap<>();
-    // Maps component classes to their implementations
-    private Map<Class<?>, Class<?>> componentRegistry = new HashMap<>();
-    // Keeps track of classes currently being created to detect circular dependencies
-    private Set<Class<?>> currentlyInCreation = new HashSet<>();
+    private static final Logger log = LoggerFactory.getLogger(DIContainer.class);
+    // Map to store singleton components
+    private Map<Class<?>, Object> singletonComponents = new HashMap<>();
+    // Map to store prototype component classes
+    private Map<Class<?>, Class<?>> prototypeComponents = new HashMap<>();
+    // Map to store components with qualifiers
+    private Map<String, Object> qualifiedComponents = new HashMap<>();
 
-    /**
-     * Scans the specified package for classes annotated with @Component and registers them.
-     *
-     * @param packageName the name of the package to scan
-     * @throws Exception if scanning or registration fails
-     */
-    public void scanPackage(String packageName) throws Exception {
-        // Get all classes annotated with @Component from the package
-        Set<Class<?>> components = PackageScanner.getClassesWithAnnotation(packageName, Component.class);
+    // Constructor that takes a base package to scan for components
+    public DIContainer(String basePackage) throws Exception {
+        scanComponents(basePackage);  // Scan for components in the provided package
+        injectDependencies();         // Inject dependencies into the components
+        initializePostConstructMethods(); // Invoke @PostConstruct methods after dependencies are injected
 
-        for (Class<?> component : components) {
-            register(component);
+    }
+
+    // Method to scan components annotated with @Component within a given package
+    private void scanComponents(String basePackage) throws Exception {
+        System.out.println("start scanning " + basePackage + " package...");
+        Reflections reflections = new Reflections(basePackage);
+        Set<Class<?>> componentClasses = reflections.getTypesAnnotatedWith(Component.class);
+        for (Class<?> componentClass : componentClasses) {
+            Component componentAnnotation = componentClass.getAnnotation(Component.class);
+            Scope scope = componentAnnotation.scope(); // Get the scope (SINGLETON or PROTOTYPE) of the component
+            System.out.println(componentClass + "\tscope " + scope);
+
+            if (scope == Scope.SINGLETON) {
+                try {
+                    Object instance = createInstance(componentClass);
+                    System.out.println(componentClass.getName() + "created successfully and the dependency has been injected.\n");
+                    singletonComponents.put(componentClass, instance);
+
+                    // Handle components with qualifiers
+                    Qualifier qualifier = componentClass.getAnnotation(Qualifier.class);
+                    if (qualifier != null)
+                        qualifiedComponents.put(qualifier.value(), instance);
+
+                } catch (Exception e) {
+                    throw new RuntimeException("Failed to create component: " + componentClass.getName(), e);
+                }
+            } else if (scope == Scope.PROTOTYPE) {
+                // Handle PROTOTYPE scoped components
+                prototypeComponents.put(componentClass, componentClass);
+
+                // Handle components with qualifiers
+                Qualifier qualifier = componentClass.getAnnotation(Qualifier.class);
+                if (qualifier != null)
+                    qualifiedComponents.put(qualifier.value(), componentClass);
+
+            }
         }
     }
 
-    /**
-     * Registers a component class in the container.
-     * If the component is a singleton, creates and stores its instance.
-     *
-     * @param componentClass the class of the component to register
-     * @throws Exception if instance creation or registration fails
-     */
-    public void register(Class<?> componentClass) throws Exception {
-        // Avoid re-registering the same component
-        if (componentRegistry.containsKey(componentClass)) {
-            return;
-        }
-        // Check the component's scope (singleton or prototype)
-        Scope scope = componentClass.getAnnotation(Scope.class);
-        if (scope == null || scope.value() == "singleton") {
-            // Create a singleton instance and store it
-            Object singletonInstance = createInstance(componentClass);
-            singletonObjects.put(componentClass, singletonInstance);
+    // Method to create a new instance of a component class
+    private <T> T createInstance(Class<T> componentClass) throws Exception {
+        Constructor<?>[] constructors = componentClass.getConstructors();
 
-        } else {
-            // Register the component class for prototype instantiation
-            componentRegistry.put(componentClass, componentClass);
+        for (Constructor<?> constructor : constructors) {
+            if (constructor.isAnnotationPresent(Inject.class)) {
+                // If the constructor is annotated with @Inject, inject its parameters
+                Class<?>[] paramTypes = constructor.getParameterTypes();
+                Object[] params = new Object[paramTypes.length];
+
+                for (int i = 0; i < paramTypes.length; i++) {
+                    params[i] = getComponent(paramTypes[i]);  // Inject dependencies into constructor parameters
+                }
+
+                return componentClass.cast(constructor.newInstance(params));
+            }
         }
+
+        // If no @Inject constructor is found, use the default constructor
+        return componentClass.getDeclaredConstructor().newInstance();
     }
 
-    /**
-     * Creates an instance of the specified component class.
-     * Injects dependencies and calls the @PostConstruct method if present.
-     *
-     * @param componentClass the class of the component to create
-     * @return a new instance of the component
-     * @throws Exception if instance creation or injection fails
-     */
-    private Object createInstance(Class<?> componentClass) throws Exception {
-        // Create a new instance using the default constructor
-        Constructor<?> constructor = componentClass.getDeclaredConstructor();
-        constructor.setAccessible(true);
-        Object instance = constructor.newInstance();
-        // Inject dependencies into the instance
-        injectDependencies(instance);
-        // Call the @PostConstruct method if present
-        invokePostConstruct(instance);
-
-        return instance;
+    // Method to get a component by its class type
+    public <T> T getComponent(Class<T> componentClass) {
+        if (singletonComponents.containsKey(componentClass)) {
+            // Return the singleton instance if available
+            return componentClass.cast(singletonComponents.get(componentClass));
+        } else if (prototypeComponents.containsKey(componentClass)) {
+            // Create a new prototype instance if it's a prototype-scoped component
+            try {
+                T instance = createInstance(componentClass);
+                injectComponentDependencies(instance);
+                invokePostConstructMethods(instance);
+                return instance;
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to create prototype component: " + componentClass.getName(), e);
+            }
+        }
+        throw new RuntimeException("Component not found: " + componentClass.getName());
     }
 
-    /**
-     * Resolves a component and its dependencies.
-     * Throws an exception if a circular dependency is detected.
-     *
-     * @param componentClass the class of the component to resolve
-     * @param <T>            the type of the component
-     * @return an instance of the resolved component
-     * @throws Exception if component resolution fails
-     */
-    public <T> T resolve(Class<T> componentClass) throws Exception {
-        // Check for circular dependencies
-        if (currentlyInCreation.contains(componentClass)) {
-            throw new RuntimeException("Circular dependency detected for " + componentClass.getName());
-        }
+    // Method to inject dependencies into a specific component
+    private void injectComponentDependencies(Object component) {
+        Field[] fields = component.getClass().getDeclaredFields();
 
-        // Return the singleton instance if it exists
-        if (singletonObjects.containsKey(componentClass)) {
-            return componentClass.cast(singletonObjects.get(componentClass));
-        }
-
-        if (componentRegistry.containsKey(componentClass)) {
-            currentlyInCreation.add(componentClass);
-            Object instance = createInstance(componentClass);
-            currentlyInCreation.remove(componentClass);
-            return componentClass.cast(instance);
-        }
-
-        throw new RuntimeException("No component registered for " + componentClass.getName());
-    }
-
-    /**
-     * Injects dependencies into fields and setter methods annotated with @Inject.
-     *
-     * @param instance the instance in which to inject dependencies
-     * @throws Exception if dependency injection fails
-     */
-    private void injectDependencies(Object instance) throws Exception {
-        // Inject dependencies into fields
-        Field[] fields = instance.getClass().getDeclaredFields();
         for (Field field : fields) {
-            if (field.isAnnotationPresent(Inject.class)) {
-                var dependency = resolve(field.getType());
-                field.setAccessible(true);
-                field.set(instance, dependency);
-            }
-        }
+            // Check if the field is annotated with @Autowired or @Inject
+            if (field.isAnnotationPresent(Autowired.class) || field.isAnnotationPresent(Inject.class)) {
+                try {
+                    field.setAccessible(true);  // Allow access to private fields
 
-        // Inject dependencies via setter methods
-        Method[] methods = instance.getClass().getDeclaredMethods();
-        for (Method method : methods) {
-            if (method.isAnnotationPresent(Inject.class) && method.getParameterCount() == 1) {
-                Object dependency = resolve(method.getParameterTypes()[0]);
-                method.setAccessible(true);
-                method.invoke(instance, dependency);
+                    // Check if the field has a @Qualifier annotation
+                    Qualifier qualifier = field.getAnnotation(Qualifier.class);
+                    Object dependency;
+
+                    if (qualifier != null)
+                        // Get the specific qualified component
+                        dependency = qualifiedComponents.get(qualifier.value());
+                    else
+                        // Get the component by its type
+                        dependency = getComponent(field.getType());
+
+
+                    // Inject the dependency into the field
+                    field.set(component, dependency);
+                } catch (IllegalAccessException e) {
+                    throw new RuntimeException("Failed to inject dependencies into: " + component.getClass().getName(), e);
+                }
             }
         }
     }
 
-    /**
-     * Calls methods annotated with @PostConstruct after dependency injection.
-     *
-     * @param instance the instance in which to invoke the @PostConstruct method
-     * @throws Exception if method invocation fails
-     */
-    private void invokePostConstruct(Object instance) throws Exception {
-        Method[] methods = instance.getClass().getDeclaredMethods();
+    // Method to inject dependencies into singleton components
+    private void injectDependencies() {
+        for (Object component : singletonComponents.values()) {
+            injectComponentDependencies(component);
+        }
+    }
+
+    private void initializePostConstructMethods() {
+        for (Object component : singletonComponents.values()) {
+            invokePostConstructMethods(component);
+        }
+    }
+
+    // Method to invoke @PostConstruct methods on a specific component
+    private void invokePostConstructMethods(Object component) {
+        Method[] methods = component.getClass().getDeclaredMethods();
+
         for (Method method : methods) {
             if (method.isAnnotationPresent(PostConstruct.class)) {
-                method.setAccessible(true);
-                method.invoke(instance);
+                try {
+                    method.setAccessible(true);
+                    method.invoke(component); // Invoke the method annotated with @PostConstruct
+                } catch (Exception e) {
+                    throw new RuntimeException("Failed to invoke @PostConstruct method on: " + component.getClass().getName(), e);
+                }
             }
         }
-    }
-
-    public Map<Class<?>, Object> getSingletonObjects() {
-        return singletonObjects;
-    }
-
-    public Map<Class<?>, Class<?>> getComponentRegistry() {
-        return componentRegistry;
     }
 }

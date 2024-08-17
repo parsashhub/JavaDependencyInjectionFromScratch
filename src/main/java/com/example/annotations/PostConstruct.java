@@ -1,11 +1,11 @@
 package com.example.annotations;
 
+import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
-/**
- * Annotation to mark a method to be called after dependency injection is done.
- */
 @Retention(RetentionPolicy.RUNTIME)
+@Target(ElementType.METHOD)
 public @interface PostConstruct {
 }
