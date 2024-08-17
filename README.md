@@ -1,19 +1,33 @@
+
+---
+
 # Custom Dependency Injection Framework in Java
 
 This repository contains a custom implementation of a Dependency Injection (DI) framework in Java, inspired by the
 concepts used in popular frameworks like Spring. The project demonstrates how DI works and includes examples of
 both `singleton` and `prototype` scopes.
 
+## Overview
+
+This project implements a custom Dependency Injection (DI) framework in Java, similar to Spring. It provides annotations
+for managing dependencies and allows components to be injected into other components automatically.
+
 ## Table of Contents
 
-- [Introduction](#introduction)
-- [Features](#features)
-- [Setup](#setup)
+- [Introduction](#Introduction)
+- [Prerequisites](#Prerequisites)
+- [Installation](#installation)
+- [Project Structure](#project-structure)
+- [Annotations](#annotations)
+    - [@Component](#component)
+    - [@Inject](#inject)
+    - [@Autowired](#autowired)
+    - [@Qualifier](#qualifier)
 - [Usage](#usage)
-    - [Singleton Scope](#singleton-scope)
-    - [Prototype Scope](#prototype-scope)
-- [How It Works](#how-it-works)
-- [Components](#components)
+    - [Component Registration](#component-registration)
+    - [Dependency Injection](#dependency-injection)
+    - [Qualifier Usage](#qualifier-usage)
+- [Example](#example)
 - [License](#license)
 
 ## Introduction
@@ -22,12 +36,12 @@ Dependency Injection is a design pattern used to implement IoC (Inversion of Con
 dependent objects outside of a class and providing those objects to the class. This project is a simplified version of a
 DI container that can scan packages, resolve dependencies, and manage the lifecycle of components.
 
-## Dependency Injection (DI)
+### Dependency Injection (DI)
 
 DI is a design pattern that allows an object to receive its dependencies from an external source rather than creating
 them itself. This makes code more modular, testable, and maintainable.
 
-## Inversion of Control (IoC)
+### Inversion of Control (IoC)
 
 In short, "Don't call us, we'll call you."
 
@@ -38,20 +52,20 @@ In short, "Don't call us, we'll call you."
 - IoC helps it focus a module on the task it is designed for.
 - IoC prevents side effects when replacing a module.
 
-## Annotations
+### Annotations
 
 Annotations in Java provide metadata for the code and can be used to mark classes, fields, methods, etc., for special
 processing. In our DI framework, annotations like @Component, @Inject, @Scope, and @PostConstruct help manage the
 components and their dependencies.
 
-## Scopes
+### Scopes
 
 Scopes define the lifecycle of an object. The two common scopes are:
 
 - Singleton: A single instance is created and shared throughout the application.
 - Prototype: A new instance is created every time it's requested.
 
-## Features
+### Features
 
 - **Custom DI Container**: Manages the creation and injection of dependencies.
 - **Singleton Scope**: Components are created once and shared across the application.
@@ -60,125 +74,188 @@ Scopes define the lifecycle of an object. The two common scopes are:
   and `@Scope`.
 - **Package Scanning**: Automatically detects and registers components from a specified package.
 
-## Setup
 
-### Prerequisites
+## Prerequisites
 
 - Java Development Kit (JDK) 8 or higher
 - An IDE or text editor to view and edit the code
 
-### Clone the Repository
+## Installation
 
-```bash
-git clone https://github.com/yourusername/custom-di-framework.git
-cd custom-di-framework
+1. **Clone the repository**:
+
+   ```bash
+   git clone https://github.com/parsashhub/JavaDependencyInjectionFromScratch.git
+   ```
+
+2. **Navigate to the project directory**:
+
+   ```bash
+   cd JavaDependencyInjectionFromScratch
+   ```
+
+3. **Compile the project**:
+
+   Use a Java IDE (e.g., IntelliJ IDEA, Eclipse) or the command line:
+
+   ```bash
+   javac -d bin src/com/example/*.java
+   ```
+
+4. **Run the project**:
+
+   ```bash
+   java -cp bin com.example.Main
+   ```
+
+## Project Structure
+
+```
+/src
+│
+├── /com/example
+│   ├── /DI 
+│       └── DIContainer.java           // Main dependency injection container
+│   ├── /Enums               // Enum for bean scopes (SINGLETON, PROTOTYPE)
+│       └── Scope.java
+│   ├── /annotations
+│       ├── Component.java             // @Component annotation
+│       ├── Autowired.java             // @Autowired annotation
+│       ├── Inject.java                // @Inject annotation
+│       └── Qualifier.java             // @Qualifier annotation
+│   ├── /interfaces
+│       └── IGreetingService.java            
+│   ├── GreetingService.java        // Service interface
+│   ├── EnglishGreetingService.java // Singleton component with qualifier
+│   ├── SpanishGreetingService.java // Prototype component with qualifier
+│   ├── GreetingClient.java         // Client class using injected services
+│   └── Main.java                   // Main class to run the example
 ```
 
-### Compile and Run
+## Annotations
 
-You can compile and run the project using your IDE or from the command line:
+### `@Component`
 
-```bash
-javac -d out/ src/com/example/*.java
-java -cp out/ com.example.Main
-```
+Marks a class as a component, making it eligible for DI. Components can have different scopes.
+
+- **Usage**: Place this annotation on classes you want to manage as beans.
+- **Scope Options**:
+    - `Scope.SINGLETON` (default): A single instance is shared.
+    - `Scope.PROTOTYPE`: A new instance is created each time it is injected.
+
+### `@Inject`
+
+Indicates that a dependency should be injected. Works on fields, constructors, or methods.
+
+- **Usage**: Place this annotation on fields or constructors to indicate where dependencies should be injected.
+
+### `@Autowired`
+
+Similar to `@Inject`, it marks a dependency for injection. Commonly used in Spring-based projects.
+
+- **Usage**: Can be used interchangeably with `@Inject` on fields, constructors, or methods.
+
+### `@Qualifier`
+
+Used to resolve ambiguity when multiple implementations of an interface are available.
+
+- **Usage**: Place this annotation on a field, constructor, or method along with `@Inject` or `@Autowired` to specify
+  the desired implementation.
 
 ## Usage
 
-### Singleton Scope
+### Component Registration
 
-In the singleton scope, only one instance of a component is created and shared across the entire application. Here’s how
-you can see it in action:
+To register a class as a component:
+
+```java
+
+@Component(scope = Scope.SINGLETON)
+public class MyService {
+    // Class content
+}
+```
+
+### Dependency Injection
+
+Inject dependencies into another class:
 
 ```java
 
 @Component
-@Scope("singleton")
-class Client {
-    @Inject
-    private ServiceB serviceB;
+public class MyClient {
 
-    @Inject
-    private PrototypeService prototypeService;
+    @Inject // or @Autowired
+    private MyService myService;
 
-    public void process() {
-        serviceB.doSomething();
-        prototypeService.serve();
+    public void performAction() {
+        myService.doSomething();
     }
 }
 ```
 
-- The `Client` class is marked as a singleton, and the DI container will ensure that only one instance is created and
-  shared.
+### Qualifier Usage
 
-### Prototype Scope
-
-In the prototype scope, a new instance of the component is created every time it is requested:
+When multiple implementations of an interface exist:
 
 ```java
 
-@Component
-@Scope("prototype")
-class PrototypeService {
-    private final int instanceId = (int) (Math.random() * 1000);
+@Component(scope = Scope.SINGLETON)
+@Qualifier("englishGreeting")
+public class EnglishGreetingService implements GreetingService {
+    // Implementation
+}
 
-    public void serve() {
-        System.out.println("PrototypeService instance ID: " + instanceId + " is serving...");
+@Component(scope = Scope.PROTOTYPE)
+@Qualifier("spanishGreeting")
+public class SpanishGreetingService implements GreetingService {
+    // Implementation
+}
+
+@Component
+public class GreetingClient {
+
+    @Autowired
+    @Qualifier("englishGreeting")
+    private GreetingService greetingService;
+
+    public void greet(String name) {
+        greetingService.greet(name);
     }
 }
 ```
 
-- The `PrototypeService` class will have a different instance every time it is injected or resolved.
+## Example
 
-### Running the Application
+### Main Class
 
-You can see the DI in action by running the `Main` class:
+The `Main.java` file initializes the DI container and retrieves the components:
 
 ```java
 public class Main {
-    public static void main(String[] args) throws Exception {
-        // Create the DI container
-        DIContainer container = new DIContainer();
-        // Scan the package for components and register them
-        container.scanPackage("com.example");
+    public static void main(String[] args) {
+        DIContainer container = new DIContainer("com.example");
 
-        // Resolve the Client component
-        Client client = container.resolve(Client.class);
+        GreetingClient client = container.getComponent(GreetingClient.class);
+        client.greet("John");
 
-        // Call the process method to demonstrate dependency injection
-        client.process();
+        GreetingService spanishService = container.getComponent(SpanishGreetingService.class);
+        spanishService.greet("Juan");
     }
 }
 ```
 
-This will output logs demonstrating the lifecycle of the singleton and prototype components.
+### Expected Output
 
-## How It Works
+When you run the `Main` class, you should see:
 
-### Key Components
-
-1. **DIContainer**: The core of the DI framework, responsible for scanning packages, registering components, and
-   resolving dependencies.
-2. **@Component**: Annotation used to mark classes as components to be managed by the DI container.
-3. **@Scope**: Annotation to specify the scope (`singleton` or `prototype`) of a component.
-4. **@Inject**: Annotation used to indicate where dependencies should be injected.
-
-### Example Components
-
-- **Client**: A singleton component that depends on `ServiceB` and `PrototypeService`.
-- **PrototypeService**: A prototype component that creates a new instance every time it is requested.
-
-## Components
-
-- `DIContainer.java`: The DI container that handles the creation and injection of components.
-- `Component.java`: Annotation to mark a class as a component.
-- `Scope.java`: Annotation to define the scope of a component.
-- `Inject.java`: Annotation to mark dependencies that need to be injected.
-- `Main.java`: Entry point of the application, demonstrating the DI framework in action.
-- `Client.java`, `ServiceA.java`, `ServiceB.java`: Example classes showing how to use the DI framework.
+```
+Hello, John!
+¡Hola, Juan!
+```
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
 ---
