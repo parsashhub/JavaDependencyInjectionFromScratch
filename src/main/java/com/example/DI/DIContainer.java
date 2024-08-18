@@ -3,9 +3,6 @@ package com.example.DI;
 import com.example.annotations.*;
 import com.example.enums.Scope;
 import org.reflections.Reflections;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -14,12 +11,8 @@ import java.util.Map;
 import java.util.Set;
 
 public class DIContainer {
-    private static final Logger log = LoggerFactory.getLogger(DIContainer.class);
-    // Map to store singleton components
-    private Map<Class<?>, Object> singletonComponents = new HashMap<>();
-    // Map to store prototype component classes
-    private Map<Class<?>, Class<?>> prototypeComponents = new HashMap<>();
-    // Map to store components with qualifiers
+    // Single map to store both singleton instances and prototype classes
+    private Map<String, Object> components = new HashMap<>();
     private Map<String, Object> qualifiedComponents = new HashMap<>();
 
     // Constructor that takes a base package to scan for components
@@ -35,16 +28,18 @@ public class DIContainer {
         System.out.println("start scanning " + basePackage + " package...");
         Reflections reflections = new Reflections(basePackage);
         Set<Class<?>> componentClasses = reflections.getTypesAnnotatedWith(Component.class);
+
         for (Class<?> componentClass : componentClasses) {
             Component componentAnnotation = componentClass.getAnnotation(Component.class);
             Scope scope = componentAnnotation.scope(); // Get the scope (SINGLETON or PROTOTYPE) of the component
+            String className = componentClass.getName();
             System.out.println(componentClass + "\tscope " + scope);
 
             if (scope == Scope.SINGLETON) {
                 try {
                     Object instance = createInstance(componentClass);
+                    components.put(className, instance);
                     System.out.println(componentClass.getName() + "created successfully and the dependency has been injected.\n");
-                    singletonComponents.put(componentClass, instance);
 
                     // Handle components with qualifiers
                     Qualifier qualifier = componentClass.getAnnotation(Qualifier.class);
@@ -56,7 +51,7 @@ public class DIContainer {
                 }
             } else if (scope == Scope.PROTOTYPE) {
                 // Handle PROTOTYPE scoped components
-                prototypeComponents.put(componentClass, componentClass);
+                components.put(className, componentClass);
 
                 // Handle components with qualifiers
                 Qualifier qualifier = componentClass.getAnnotation(Qualifier.class);
@@ -71,14 +66,15 @@ public class DIContainer {
     private <T> T createInstance(Class<T> componentClass) throws Exception {
         Constructor<?>[] constructors = componentClass.getConstructors();
 
-        for (Constructor<?> constructor : constructors) {
+        for (var constructor : constructors) {
             if (constructor.isAnnotationPresent(Inject.class)) {
                 // If the constructor is annotated with @Inject, inject its parameters
                 Class<?>[] paramTypes = constructor.getParameterTypes();
                 Object[] params = new Object[paramTypes.length];
 
                 for (int i = 0; i < paramTypes.length; i++) {
-                    params[i] = getComponent(paramTypes[i]);  // Inject dependencies into constructor parameters
+                    // Inject dependencies into constructor parameters
+                    params[i] = getComponent(paramTypes[i].getName());
                 }
 
                 return componentClass.cast(constructor.newInstance(params));
@@ -90,29 +86,30 @@ public class DIContainer {
     }
 
     // Method to get a component by its class type
-    public <T> T getComponent(Class<T> componentClass) {
-        if (singletonComponents.containsKey(componentClass)) {
-            // Return the singleton instance if available
-            return componentClass.cast(singletonComponents.get(componentClass));
-        } else if (prototypeComponents.containsKey(componentClass)) {
-            // Create a new prototype instance if it's a prototype-scoped component
+    public <T> T getComponent(String className) {
+        Object component = components.get(className);
+        // Prototype case
+        if (component instanceof Class) {
+
             try {
-                T instance = createInstance(componentClass);
+                Class<?> componentClass = (Class<?>) component;
+                T instance = (T) createInstance(componentClass);
                 injectComponentDependencies(instance);
-                invokePostConstructMethods(instance);
-                return instance;
+                invokePostConstructMethods(instance);  // Invoke @PostConstruct methods for prototype components
+                return (T) componentClass.cast(instance);
             } catch (Exception e) {
-                throw new RuntimeException("Failed to create prototype component: " + componentClass.getName(), e);
+                throw new RuntimeException("Failed to create prototype component: " + className, e);
             }
+        } else {
+            return (T) component;
         }
-        throw new RuntimeException("Component not found: " + componentClass.getName());
     }
 
     // Method to inject dependencies into a specific component
     private void injectComponentDependencies(Object component) {
         Field[] fields = component.getClass().getDeclaredFields();
 
-        for (Field field : fields) {
+        for (var field : fields) {
             // Check if the field is annotated with @Autowired or @Inject
             if (field.isAnnotationPresent(Autowired.class) || field.isAnnotationPresent(Inject.class)) {
                 try {
@@ -122,14 +119,14 @@ public class DIContainer {
                     Qualifier qualifier = field.getAnnotation(Qualifier.class);
                     Object dependency;
 
-                    if (qualifier != null)
-                        // Get the specific qualified component
+                    // Get the specific qualified component
+                    if (qualifier != null) {
                         dependency = qualifiedComponents.get(qualifier.value());
-                    else
-                        // Get the component by its type
-                        dependency = getComponent(field.getType());
-
-
+                    }
+                    // Get the component by its type
+                    else {
+                        dependency = getComponent(field.getType().getName());
+                    }
                     // Inject the dependency into the field
                     field.set(component, dependency);
                 } catch (IllegalAccessException e) {
@@ -141,14 +138,19 @@ public class DIContainer {
 
     // Method to inject dependencies into singleton components
     private void injectDependencies() {
-        for (Object component : singletonComponents.values()) {
-            injectComponentDependencies(component);
+        for (Object component : components.values()) {
+            // Skip prototype classes
+            if (!(component instanceof Class))
+                injectComponentDependencies(component);
+
         }
     }
 
     private void initializePostConstructMethods() {
-        for (Object component : singletonComponents.values()) {
-            invokePostConstructMethods(component);
+        for (Object component : components.values()) {
+            if (!(component instanceof Class)) {  // Skip prototype classes
+                invokePostConstructMethods(component);
+            }
         }
     }
 
@@ -156,7 +158,7 @@ public class DIContainer {
     private void invokePostConstructMethods(Object component) {
         Method[] methods = component.getClass().getDeclaredMethods();
 
-        for (Method method : methods) {
+        for (var method : methods) {
             if (method.isAnnotationPresent(PostConstruct.class)) {
                 try {
                     method.setAccessible(true);
@@ -166,5 +168,13 @@ public class DIContainer {
                 }
             }
         }
+    }
+
+    public Map<String, Object> getComponents() {
+        return components;
+    }
+
+    public Map<String, Object> getQualifiedComponents() {
+        return qualifiedComponents;
     }
 }
