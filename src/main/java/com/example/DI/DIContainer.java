@@ -11,11 +11,12 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class DIContainer {
     // Single map to store both singleton instances and prototype classes
-    private Map<String, Object> components = new HashMap<>();
-    private Map<String, Object> qualifiedComponents = new HashMap<>();
+    private Map<String, Object> components = new ConcurrentHashMap<>();
+    private Map<String, Object> qualifiedComponents = new ConcurrentHashMap<>();
     private Properties properties = new Properties(); // Properties to hold key-value pairs
 
     // Constructor that takes a base package to scan for components
@@ -51,25 +52,24 @@ public class DIContainer {
 
             if (scope == Scope.SINGLETON) {
                 try {
-                    Object instance = createInstance(componentClass);
-                    components.put(className, instance);
+                    components.putIfAbsent(className, createInstance(componentClass));
+                    Object instance = components.get(className);
                     System.out.println(componentClass.getName() + "created successfully and the dependency has been injected.\n");
 
                     // Handle components with qualifiers
                     Qualifier qualifier = componentClass.getAnnotation(Qualifier.class);
-                    if (qualifier != null) qualifiedComponents.put(qualifier.value(), instance);
+                    if (qualifier != null) qualifiedComponents.putIfAbsent(qualifier.value(), instance);
 
                 } catch (Exception e) {
                     throw new RuntimeException("Failed to create component: " + componentClass.getName(), e);
                 }
             } else if (scope == Scope.PROTOTYPE) {
                 // Handle PROTOTYPE scoped components
-                components.put(className, componentClass);
+                components.putIfAbsent(className, componentClass);
 
                 // Handle components with qualifiers
                 Qualifier qualifier = componentClass.getAnnotation(Qualifier.class);
-                if (qualifier != null) qualifiedComponents.put(qualifier.value(), componentClass);
-
+                if (qualifier != null) qualifiedComponents.putIfAbsent(qualifier.value(), componentClass);
             }
         }
     }
