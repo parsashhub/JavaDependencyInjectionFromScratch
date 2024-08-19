@@ -3,24 +3,38 @@ package com.example.DI;
 import com.example.annotations.*;
 import com.example.enums.Scope;
 import org.reflections.Reflections;
+
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 
 public class DIContainer {
     // Single map to store both singleton instances and prototype classes
     private Map<String, Object> components = new HashMap<>();
     private Map<String, Object> qualifiedComponents = new HashMap<>();
+    private Properties properties = new Properties(); // Properties to hold key-value pairs
 
     // Constructor that takes a base package to scan for components
     public DIContainer(String basePackage) throws Exception {
+        loadProperties();
         scanComponents(basePackage);  // Scan for components in the provided package
         injectDependencies();         // Inject dependencies into the components
         initializePostConstructMethods(); // Invoke @PostConstruct methods after dependencies are injected
+    }
 
+    // Method to load properties from application.properties file
+    private void loadProperties() throws Exception {
+        try (var input = getClass().getClassLoader().getResourceAsStream("application.properties")) {
+            if (input == null) {
+                System.out.println("Sorry, unable to find application.properties");
+                return;
+            }
+            properties.load(input);
+        }
     }
 
     // Method to scan components annotated with @Component within a given package
@@ -43,8 +57,7 @@ public class DIContainer {
 
                     // Handle components with qualifiers
                     Qualifier qualifier = componentClass.getAnnotation(Qualifier.class);
-                    if (qualifier != null)
-                        qualifiedComponents.put(qualifier.value(), instance);
+                    if (qualifier != null) qualifiedComponents.put(qualifier.value(), instance);
 
                 } catch (Exception e) {
                     throw new RuntimeException("Failed to create component: " + componentClass.getName(), e);
@@ -55,8 +68,7 @@ public class DIContainer {
 
                 // Handle components with qualifiers
                 Qualifier qualifier = componentClass.getAnnotation(Qualifier.class);
-                if (qualifier != null)
-                    qualifiedComponents.put(qualifier.value(), componentClass);
+                if (qualifier != null) qualifiedComponents.put(qualifier.value(), componentClass);
 
             }
         }
@@ -132,16 +144,43 @@ public class DIContainer {
                 } catch (IllegalAccessException e) {
                     throw new RuntimeException("Failed to inject dependencies into: " + component.getClass().getName(), e);
                 }
+            } else if (field.isAnnotationPresent(Value.class)) {
+                // Handle @Value annotation
+                Value valueAnnotation = field.getAnnotation(Value.class);
+                String key = valueAnnotation.value().replace("${", "").replace("}", "");
+                String value = properties.getProperty(key);
+
+                try {
+                    field.setAccessible(true);
+                    // Convert the value to the appropriate type
+                    Object convertedValue = convertValue(field.getType(), value);
+                    field.set(component, convertedValue);
+                } catch (IllegalAccessException e) {
+                    throw new RuntimeException("Failed to inject value into: " + component.getClass().getName(), e);
+                }
             }
         }
+    }
+
+    // Method to convert the string value to the appropriate field type
+    private Object convertValue(Class<?> type, String value) {
+        if (type.equals(String.class)) {
+            return value;
+        } else if (type.equals(int.class) || type.equals(Integer.class)) {
+            return Integer.parseInt(value);
+        } else if (type.equals(double.class) || type.equals(Double.class)) {
+            return Double.parseDouble(value);
+        } else if (type.equals(boolean.class) || type.equals(Boolean.class)) {
+            return Boolean.parseBoolean(value);
+        }
+        throw new RuntimeException("Unsupported type for @Value annotation: " + type);
     }
 
     // Method to inject dependencies into singleton components
     private void injectDependencies() {
         for (Object component : components.values()) {
             // Skip prototype classes
-            if (!(component instanceof Class))
-                injectComponentDependencies(component);
+            if (!(component instanceof Class)) injectComponentDependencies(component);
 
         }
     }
