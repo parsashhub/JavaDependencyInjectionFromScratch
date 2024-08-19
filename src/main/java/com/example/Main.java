@@ -18,5 +18,8 @@ public class Main {
         // Directly access the SpanishGreetingService and use it
         IGreetingService spanishService = container.getComponent(SpanishGreetingService.class.getName());
         spanishService.greet("Juan");
+
+        AppConfig appConfig = container.getComponent(AppConfig.class.getName());
+        System.out.println(appConfig.getAppName());
     }
 }
