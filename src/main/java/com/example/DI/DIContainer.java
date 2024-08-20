@@ -2,22 +2,22 @@ package com.example.DI;
 
 import com.example.annotations.*;
 import com.example.enums.Scope;
+import exceptions.CircularDependencyException;
 import org.reflections.Reflections;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class DIContainer {
     // Single map to store both singleton instances and prototype classes
     private Map<String, Object> components = new ConcurrentHashMap<>();
     private Map<String, Object> qualifiedComponents = new ConcurrentHashMap<>();
-    private Properties properties = new Properties(); // Properties to hold key-value pairs
+    // Properties to hold key-value pairs
+    private Properties properties = new Properties();
+    private Map<Class<?>, Set<Class<?>>> classDependencies = new ConcurrentHashMap<>();
 
     // Constructor that takes a base package to scan for components
     public DIContainer(String basePackage) throws Exception {
@@ -25,6 +25,7 @@ public class DIContainer {
         scanComponents(basePackage);  // Scan for components in the provided package
         injectDependencies();         // Inject dependencies into the components
         initializePostConstructMethods(); // Invoke @PostConstruct methods after dependencies are injected
+        detectCircularDependencies();
     }
 
     // Method to load properties from application.properties file
@@ -119,47 +120,60 @@ public class DIContainer {
 
     // Method to inject dependencies into a specific component
     private void injectComponentDependencies(Object component) {
-        Field[] fields = component.getClass().getDeclaredFields();
+        Class<?> componentClass = component.getClass();
+        Set<Class<?>> dependencies = new LinkedHashSet<>();
+        Stack<Class<?>> currentPath = new Stack<>();
+
+        Field[] fields = componentClass.getDeclaredFields();
 
         for (var field : fields) {
-            // Check if the field is annotated with @Autowired or @Inject
             if (field.isAnnotationPresent(Autowired.class) || field.isAnnotationPresent(Inject.class)) {
                 try {
                     field.setAccessible(true);  // Allow access to private fields
 
-                    // Check if the field has a @Qualifier annotation
                     Qualifier qualifier = field.getAnnotation(Qualifier.class);
                     Object dependency;
 
-                    // Get the specific qualified component
                     if (qualifier != null) {
                         dependency = qualifiedComponents.get(qualifier.value());
-                    }
-                    // Get the component by its type
-                    else {
+                    } else {
                         dependency = getComponent(field.getType().getName());
                     }
-                    // Inject the dependency into the field
+
+                    if (dependency != null) {
+                        dependencies.add(field.getType());
+                        // Check for circular dependencies
+                        currentPath.push(componentClass);
+                        if (isCircularDependency(field.getType(), currentPath)) {
+                            throw new RuntimeException("Circular dependency detected: " + currentPath);
+                        }
+                        currentPath.pop();
+                    }
+
                     field.set(component, dependency);
                 } catch (IllegalAccessException e) {
-                    throw new RuntimeException("Failed to inject dependencies into: " + component.getClass().getName(), e);
+                    throw new RuntimeException("Failed to inject dependencies into: " + componentClass.getName(), e);
                 }
             } else if (field.isAnnotationPresent(Value.class)) {
-                // Handle @Value annotation
                 Value valueAnnotation = field.getAnnotation(Value.class);
                 String key = valueAnnotation.value().replace("${", "").replace("}", "");
                 String value = properties.getProperty(key);
 
                 try {
                     field.setAccessible(true);
-                    // Convert the value to the appropriate type
                     Object convertedValue = convertValue(field.getType(), value);
                     field.set(component, convertedValue);
                 } catch (IllegalAccessException e) {
-                    throw new RuntimeException("Failed to inject value into: " + component.getClass().getName(), e);
+                    throw new RuntimeException("Failed to inject value into: " + componentClass.getName(), e);
                 }
             }
         }
+
+        classDependencies.put(componentClass, dependencies);
+    }
+
+    private boolean isCircularDependency(Class<?> clazz, Stack<Class<?>> currentPath) {
+        return currentPath.contains(clazz);
     }
 
     // Method to convert the string value to the appropriate field type
@@ -209,11 +223,46 @@ public class DIContainer {
         }
     }
 
+    public void detectCircularDependencies() {
+        Set<Class<?>> visited = new HashSet<>();
+        Set<Class<?>> inStack = new HashSet<>();
+
+        for (Class<?> clazz : classDependencies.keySet()) {
+            if (!visited.contains(clazz)) {
+                detectCycle(clazz, visited, inStack, new Stack<>());
+            }
+        }
+    }
+
+    private void detectCycle(Class<?> current, Set<Class<?>> visited, Set<Class<?>> inStack, Stack<Class<?>> path) {
+        if (inStack.contains(current)) throw new CircularDependencyException("Circular dependency detected: " + path);
+
+        if (visited.contains(current)) {
+            return; // Already processed
+        }
+
+        visited.add(current);
+        inStack.add(current);
+        path.push(current);
+
+        Set<Class<?>> dependencies = classDependencies.getOrDefault(current, Collections.emptySet());
+        for (Class<?> dependency : dependencies) {
+            detectCycle(dependency, visited, inStack, path);
+        }
+
+        path.pop();
+        inStack.remove(current);
+    }
+
     public Map<String, Object> getComponents() {
         return components;
     }
 
     public Map<String, Object> getQualifiedComponents() {
         return qualifiedComponents;
+    }
+
+    public Map<Class<?>, Set<Class<?>>> getClassDependencies() {
+        return classDependencies;
     }
 }
