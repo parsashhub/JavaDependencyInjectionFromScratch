@@ -6,7 +6,6 @@ import com.example.enums.Scope;
 import com.example.interfaces.IGreetingService;
 
 @Component(scope = Scope.PROTOTYPE)
-@Qualifier("spanishGreeting")
 public class SpanishGreetingService implements IGreetingService {
     @Override
     public void greet(String name) {

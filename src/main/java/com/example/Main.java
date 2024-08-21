@@ -1,25 +1,19 @@
 package com.example;
 
-import com.example.DI.DIContainer;
+import com.example.DI.ApplicationContext;
 import com.example.interfaces.IGreetingService;
 
 public class Main {
     public static void main(String[] args) throws Exception {
-        DIContainer container = new DIContainer("com.example");
-        System.out.println("\n*************************");
-        System.out.println("components: " + container.getComponents());
-        System.out.println("qualified components: " + container.getQualifiedComponents());
-        System.out.println("*************************\n");
+        ApplicationContext context = new ApplicationContext("com.example");
 
-        // Get GreetingClient from the container and use it
-        GreetingClient client = container.getComponent(GreetingClient.class.getName());
-        client.greet("John");
+        GreetingClient client = context.getBean(GreetingClient.class);
+        client.greet("parsa");
 
-        // Directly access the SpanishGreetingService and use it
-        IGreetingService spanishService = container.getComponent(SpanishGreetingService.class.getName());
+        IGreetingService spanishService = context.getBean(SpanishGreetingService.class);
         spanishService.greet("Juan");
 
-        AppConfig appConfig = container.getComponent(AppConfig.class.getName());
+        AppConfig appConfig = context.getBean(AppConfig.class);
         System.out.println(appConfig.getAppName());
     }
 }
