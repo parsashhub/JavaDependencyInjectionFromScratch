@@ -23,6 +23,8 @@ for managing dependencies and allows components to be injected into other compon
     - [@Inject](#inject)
     - [@Autowired](#autowired)
     - [@Qualifier](#qualifier)
+    - [@PostConstruct](#postConstruct)
+    - [@Value](#value)
 - [Usage](#usage)
     - [Component Registration](#component-registration)
     - [Dependency Injection](#dependency-injection)
@@ -115,20 +117,29 @@ Scopes define the lifecycle of an object. The two common scopes are:
 │
 ├── /com/example
 │   ├── /DI 
-│       └── DIContainer.java           // Main dependency injection container
+│   │    ├── ApplicationContext.java           // Main dependency injection context
+│   │    ├── BeanDefinition.java             
+│   │    └── BeanFactory.java            
 │   ├── /Enums               // Enum for bean scopes (SINGLETON, PROTOTYPE)
-│       └── Scope.java
+│   │    └── Scope.java
 │   ├── /annotations
-│       ├── Component.java             // @Component annotation
-│       ├── Autowired.java             // @Autowired annotation
-│       ├── Inject.java                // @Inject annotation
-│       └── Qualifier.java             // @Qualifier annotation
+│   │    ├── Component.java            
+│   │    ├── Autowired.java            
+│   │    ├── Inject.java               
+│   │    ├── PostConstruct.java               
+│   │    ├── Value.java               
+│   │    └── Qualifier.java            
 │   ├── /interfaces
-│       └── IGreetingService.java            
-│   ├── GreetingService.java        // Service interface
+│   │    └── IGreetingService.java            
+│   ├── A.java        
+│   ├── B.java        
+│   ├── C.java                      // A, B, C classes create a circular dependency exception
+│   ├── AppConfig.java              // example of @Value usage
 │   ├── EnglishGreetingService.java // Singleton component with qualifier
 │   ├── SpanishGreetingService.java // Prototype component with qualifier
 │   ├── GreetingClient.java         // Client class using injected services
+│   ├── MyClient.java         
+│   ├── MyService.java         
 │   └── Main.java                   // Main class to run the example
 ```
 
@@ -160,6 +171,18 @@ Similar to `@Inject`, it marks a dependency for injection. Commonly used in Spri
 Used to resolve ambiguity when multiple implementations of an interface are available.
 
 - **Usage**: Place this annotation on a field, constructor, or method along with `@Inject` or `@Autowired` to specify
+  the desired implementation.
+
+### `@PostConstruct`
+Used to invoke a method after the construction is done.
+
+- **Usage**: Place this annotation on a method along with `@PostConstruct` to specify
+  the desired implementation.
+
+### `@Value`
+Used to inject a field from application.properties file.
+
+- **Usage**: Place this annotation on a filed along with `@Value("${app.name}")` to specify
   the desired implementation.
 
 ## Usage
