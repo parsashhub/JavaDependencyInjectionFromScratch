@@ -2,6 +2,7 @@ package com.example.DI;
 
 import com.example.annotations.*;
 import com.example.enums.Scope;
+import com.example.logger.LogUtils;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -31,7 +32,7 @@ public class BeanFactory {
                 // Create and store the singleton instance if it's not already present
                 beans.putIfAbsent(className, createInstance(componentClass));
                 Object instance = beans.get(className);
-                System.out.println(componentClass.getName() + "created successfully and the dependency has been injected.\n");
+                LogUtils.info(componentClass.getName() + "created successfully and the dependency has been injected.\n");
 
                 if (qualifier != null) qualifiedBeans.putIfAbsent(qualifier.value(), instance);
 

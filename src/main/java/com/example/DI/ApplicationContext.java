@@ -2,13 +2,11 @@ package com.example.DI;
 
 import com.example.annotations.*;
 import com.example.enums.Scope;
+import com.example.logger.LogUtils;
 import exceptions.CircularDependencyException;
 import org.reflections.Reflections;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 
 /**
@@ -38,7 +36,7 @@ public class ApplicationContext {
     private void loadProperties() throws Exception {
         try (var input = getClass().getClassLoader().getResourceAsStream("application.properties")) {
             if (input == null) {
-                System.out.println("Sorry, unable to find application.properties");
+                LogUtils.warn("Sorry, unable to find application.properties");
                 return;
             }
             beanFactory.setProperties(input);
@@ -47,7 +45,7 @@ public class ApplicationContext {
 
     // Method to scan components annotated with @Component within a given package
     private void scanComponents(String basePackage) throws Exception {
-        System.out.println("start scanning " + basePackage + " package...");
+        LogUtils.info("start scanning " + basePackage + " package...");
         Reflections reflections = new Reflections(basePackage);
         Set<Class<?>> componentClasses = reflections.getTypesAnnotatedWith(Component.class);
 
@@ -58,7 +56,7 @@ public class ApplicationContext {
 
             String className = componentClass.getName();
             Qualifier qualifier = componentClass.getAnnotation(Qualifier.class);
-            System.out.println(componentClass + "\tscope " + scope);
+            LogUtils.info(componentClass + "\tscope " + scope);
 
             beanFactory.registerBeanDefinition(className, new BeanDefinition(componentClass, scope, qualifier));
             beanFactory.createBean(componentClass);
