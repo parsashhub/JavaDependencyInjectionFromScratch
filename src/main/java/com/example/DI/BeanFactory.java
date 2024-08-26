@@ -3,6 +3,7 @@ package com.example.DI;
 import com.example.annotations.*;
 import com.example.enums.Scope;
 import com.example.logger.LogUtils;
+import exceptions.CircularDependencyException;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -18,7 +19,7 @@ public class BeanFactory {
     private final Map<String, Object> beans = new ConcurrentHashMap<>();
     private Properties properties = new Properties();
 
-    public void createBean(String beanName, BeanDefinition beanDefinition,Class<?> componentClass) {
+    public void createBean(String beanName, BeanDefinition beanDefinition, Class<?> componentClass) {
         // register bean
         beanDefinitions.put(beanName, beanDefinition);
         // create bean
@@ -132,6 +133,7 @@ public class BeanFactory {
         }
         // Record the dependencies of the component class
         classDependencies.put(componentClass, dependencies);
+        detectCircularDependencies();
     }
 
     private void invokePostConstructMethods(Object component) {
@@ -173,6 +175,42 @@ public class BeanFactory {
         // iterate through all beans and call their PostConstruct method and skip prototype classes
         for (Object component : beans.values())
             if (!(component instanceof Class)) invokePostConstructMethods(component);
+    }
+
+    // Method to detect circular dependencies in the entire dependency graph
+    private void detectCircularDependencies() {
+        Set<Class<?>> visited = new HashSet<>();
+        Set<Class<?>> inStack = new HashSet<>();
+
+        // Iterate over all classes in the classDependencies map
+        for (Class<?> clazz : classDependencies.keySet()) {
+            // If the class hasn't been visited yet, check for cycles
+            if (!visited.contains(clazz)) {
+                detectCycle(clazz, visited, inStack, new Stack<>());
+            }
+        }
+    }
+
+    // Recursive method to detect cycles in the dependency graph
+    private void detectCycle(Class<?> current, Set<Class<?>> visited, Set<Class<?>> inStack, Stack<Class<?>> path) {
+        // If the current class is already in the stack, a cycle is detected
+        if (inStack.contains(current)) throw new CircularDependencyException("Circular dependency detected: " + path);
+
+        // If the class has already been processed, return
+        if (visited.contains(current)) return;
+
+        visited.add(current); // Mark the class as visited
+        inStack.add(current); // Add the class to the stack
+        path.push(current);   // Add the class to the current path
+
+        // Get the dependencies of the current class and recurse into them
+        Set<Class<?>> dependencies = classDependencies.getOrDefault(current, Collections.emptySet());
+        for (Class<?> dependency : dependencies)
+            detectCycle(dependency, visited, inStack, path);
+
+        // After recursion, remove the class from the current path and the stack
+        path.pop();
+        inStack.remove(current);
     }
 
     public Map<Class<?>, Set<Class<?>>> getClassDependencies() {
