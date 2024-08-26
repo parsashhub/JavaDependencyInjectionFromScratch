@@ -16,11 +16,9 @@ import java.util.*;
 public class ApplicationContext {
     // BeanFactory for managing bean creation and retrieval
     private final BeanFactory beanFactory = new BeanFactory();
-    private final String basePackage;
 
     // Constructor that takes a base package to scan for components
     public ApplicationContext(String basePackage) throws Exception {
-        this.basePackage = basePackage;
         loadProperties();                               // Load properties from application.properties
         scanComponents(basePackage);                    // Scan for components in the provided package
         beanFactory.injectDependencies();               // Inject dependencies into the components
@@ -58,8 +56,7 @@ public class ApplicationContext {
             Qualifier qualifier = componentClass.getAnnotation(Qualifier.class);
             LogUtils.info(componentClass + "\tscope " + scope);
 
-            beanFactory.registerBeanDefinition(className, new BeanDefinition(componentClass, scope, qualifier));
-            beanFactory.createBean(componentClass);
+            beanFactory.createBean(className, new BeanDefinition(componentClass, scope, qualifier), componentClass);
         }
     }
 

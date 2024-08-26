@@ -18,11 +18,10 @@ public class BeanFactory {
     private final Map<String, Object> beans = new ConcurrentHashMap<>();
     private Properties properties = new Properties();
 
-    public void registerBeanDefinition(String beanName, BeanDefinition beanDefinition) {
+    public void createBean(String beanName, BeanDefinition beanDefinition,Class<?> componentClass) {
+        // register bean
         beanDefinitions.put(beanName, beanDefinition);
-    }
-
-    public void createBean(Class<?> componentClass) {
+        // create bean
         var classDef = beanDefinitions.get(componentClass.getName());
         var className = classDef.getBeanClass().getName();
         var qualifier = componentClass.getAnnotation(Qualifier.class);
